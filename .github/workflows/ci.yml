@@ -126,6 +126,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Download order-service JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: order-service-jar
+          path: ./order-service/target/
+
+      - name: Download inventory-service JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: inventory-service-jar
+          path: ./inventory-service/target/
+
+      - name: Download payment-service JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: payment-service-jar
+          path: ./payment-service/target/
+
+      - name: Download notification-service JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: notification-service-jar
+          path: ./notification-service/target/
+
       - name: Verify Docker Compose Build
         run: |
           docker compose build
