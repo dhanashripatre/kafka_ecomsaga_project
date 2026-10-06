@@ -63,18 +63,21 @@ jobs:
         run: |
           SERVICES=("order" "inventory" "payment" "notification")
           
+          echo "Installing Trivy Vulnerability Scanner..."
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          
           for SERVICE in "${SERVICES[@]}"; do
             REPO_NAME="${{ env.PROJECT_PREFIX }}-$SERVICE"
             IMAGE_URI="$ECR_REGISTRY/$REPO_NAME:$IMAGE_TAG"
             LATEST_URI="$ECR_REGISTRY/$REPO_NAME:latest"
             
             echo "Building $SERVICE..."
-            # Assuming Dockerfiles are in service subdirectories (e.g., ./order-service/Dockerfile)
-            docker build -t $IMAGE_URI -t $LATEST_URI ./$SERVICE-service
+            # Pull the latest image to use as cache (ignore errors if it doesn't exist yet)
+            docker pull $LATEST_URI || true
+            # Build using the latest image as cache
+            docker build --cache-from $LATEST_URI -t $IMAGE_URI -t $LATEST_URI ./$SERVICE-service
             
             echo "Running Trivy Vulnerability Scanner on $SERVICE..."
-            # Download and run Trivy locally on the built image
-            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
             trivy image --severity HIGH,CRITICAL --no-progress $IMAGE_URI
             
             echo "Pushing $SERVICE to ECR..."
