@@ -66,32 +66,23 @@ jobs:
           echo "Installing Trivy Vulnerability Scanner..."
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
           
-          pids=""
           for SERVICE in "${SERVICES[@]}"; do
-            (
-              REPO_NAME="${{ env.PROJECT_PREFIX }}-$SERVICE"
-              IMAGE_URI="$ECR_REGISTRY/$REPO_NAME:$IMAGE_TAG"
-              LATEST_URI="$ECR_REGISTRY/$REPO_NAME:latest"
-              
-              echo "Building $SERVICE..."
-              # Pull the latest image to use as cache (ignore errors if it doesn't exist yet)
-              docker pull $LATEST_URI || true
-              # Build using the latest image as cache
-              docker build --cache-from $LATEST_URI -t $IMAGE_URI -t $LATEST_URI ./$SERVICE-service
-              
-              echo "Running Trivy Vulnerability Scanner on $SERVICE..."
-              trivy image --severity HIGH,CRITICAL --no-progress $IMAGE_URI
-              
-              echo "Pushing $SERVICE to ECR..."
-              docker push $IMAGE_URI
-              docker push $LATEST_URI
-            ) &
-            pids+=" $!"
-          done
-          
-          # Wait for all parallel jobs to finish, and fail the workflow if ANY of them fail
-          for pid in $pids; do
-            wait $pid || exit 1
+            REPO_NAME="${{ env.PROJECT_PREFIX }}-$SERVICE"
+            IMAGE_URI="$ECR_REGISTRY/$REPO_NAME:$IMAGE_TAG"
+            LATEST_URI="$ECR_REGISTRY/$REPO_NAME:latest"
+            
+            echo "Building $SERVICE..."
+            # Pull the latest image to use as cache
+            docker pull $LATEST_URI || true
+            # Build with BuildKit inline cache metadata so --cache-from actually works
+            DOCKER_BUILDKIT=1 docker build --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $LATEST_URI -t $IMAGE_URI -t $LATEST_URI ./$SERVICE-service
+            
+            echo "Running Trivy Vulnerability Scanner on $SERVICE..."
+            trivy image --severity HIGH,CRITICAL --no-progress $IMAGE_URI
+            
+            echo "Pushing $SERVICE to ECR..."
+            docker push $IMAGE_URI
+            docker push $LATEST_URI
           done
 
   deploy:
