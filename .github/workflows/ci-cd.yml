@@ -131,9 +131,12 @@ jobs:
           EOF
           )
 
+          # Save the script to a JSON file to safely handle quotes and newlines
+          jq -n --arg script "$DEPLOY_SCRIPT" '{"commands": [$script]}' > parameters.json
+
           # Send the command to the EC2 instance tagged with Name=kafka-ecomsaga-server
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=${{ env.PROJECT_PREFIX }}-server" \
-            --parameters commands=["$DEPLOY_SCRIPT"] \
+            --parameters file://parameters.json \
             --comment "Deploying latest EcomSaga containers"
