@@ -12,3 +12,23 @@ output "ec2_instance_id" {
   description = "The ID of the EC2 instance"
   value       = aws_instance.app_server.id
 }
+
+output "ec2_public_ip" {
+  description = "The Public IP of the EC2 instance"
+  value       = aws_instance.app_server.public_ip
+}
+
+resource "null_resource" "print_urls" {
+  # Trigger it to run every time we run apply
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = "bash print_urls.sh"
+    environment = {
+      ALB_URL = aws_lb.main.dns_name
+      EC2_IP  = aws_instance.app_server.public_ip
+    }
+  }
+}

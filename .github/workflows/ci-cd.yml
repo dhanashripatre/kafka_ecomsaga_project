@@ -129,6 +129,19 @@ jobs:
               -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
               --restart unless-stopped \
               apache/kafka:latest
+
+            # Stop and remove old kafka-ui if exists
+            docker stop kafka-ui || true
+            docker rm kafka-ui || true
+
+            # Run Kafka UI on port 8084
+            docker run -d --name kafka-ui \
+              --network saga-network \
+              -p 8084:8080 \
+              -e KAFKA_CLUSTERS_0_NAME=local \
+              -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092 \
+              --restart unless-stopped \
+              provectuslabs/kafka-ui:latest
             
             SERVICES=("order:8080" "inventory:8081" "payment:8082" "notification:8083")
             
