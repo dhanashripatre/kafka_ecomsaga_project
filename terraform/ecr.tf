@@ -1,0 +1,18 @@
+locals {
+  services = ["order", "inventory", "payment", "notification"]
+}
+
+resource "aws_ecr_repository" "services" {
+  for_each             = toset(local.services)
+  name                 = "${var.project_name}-${each.key}"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name    = "${var.project_name}-${each.key}"
+    Project = var.project_name
+  }
+}

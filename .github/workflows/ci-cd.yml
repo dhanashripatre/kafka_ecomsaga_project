@@ -1,0 +1,135 @@
+name: CI/CD Pipeline for EcomSaga
+
+on:
+  push:
+    branches:
+      - main # Triggers the pipeline when you push to the main branch
+  workflow_dispatch:
+    
+# Required for AWS OIDC authentication
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  # Make sure this matches your actual AWS Account ID and OIDC Role Name
+  AWS_ROLE_ARN: arn:aws:iam::227091671010:role/GitHubActions-KafkaEcomSaga-Role
+  PROJECT_PREFIX: kafka-ecomsaga
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 2. Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # NOTE: Assuming a standard Maven multi-module project
+      - name: 3. Build Java Applications
+        run: mvn clean package -DskipTests
+
+      - name: 4. SonarQube Analysis
+        # Replace with your actual SonarQube GitHub Action configuration
+        run: echo "Running SonarQube Analysis..."
+        # uses: sonarsource/sonarcloud-github-action@master
+        # env:
+        #   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: 5. Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 6. Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 7. Build, Trivy Scan, and Push Docker Images
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          SERVICES=("order" "inventory" "payment" "notification")
+          
+          for SERVICE in "${SERVICES[@]}"; do
+            REPO_NAME="${{ env.PROJECT_PREFIX }}-$SERVICE"
+            IMAGE_URI="$ECR_REGISTRY/$REPO_NAME:$IMAGE_TAG"
+            LATEST_URI="$ECR_REGISTRY/$REPO_NAME:latest"
+            
+            echo "Building $SERVICE..."
+            # Assuming Dockerfiles are in service subdirectories (e.g., ./order/Dockerfile)
+            docker build -t $IMAGE_URI -t $LATEST_URI ./$SERVICE
+            
+            echo "Running Trivy Vulnerability Scanner on $SERVICE..."
+            # Download and run Trivy locally on the built image
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+            trivy image --severity HIGH,CRITICAL --no-progress $IMAGE_URI
+            
+            echo "Pushing $SERVICE to ECR..."
+            docker push $IMAGE_URI
+            docker push $LATEST_URI
+          done
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 2. Deploy to EC2 via AWS Systems Manager (SSM)
+        # We use SSM to securely run commands on the EC2 instance without needing SSH keys
+        run: |
+          # Fetch your AWS Account ID dynamically to construct the ECR URL
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_URL="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          
+          # The shell script that will be executed ON your EC2 server
+          DEPLOY_SCRIPT=$(cat << 'EOF'
+            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 227091671010.dkr.ecr.ap-south-1.amazonaws.com
+            
+            SERVICES=("order:8080" "inventory:8081" "payment:8082" "notification:8083")
+            
+            for ITEM in "${SERVICES[@]}"; do
+              SERVICE="${ITEM%%:*}"
+              PORT="${ITEM##*:}"
+              IMAGE="227091671010.dkr.ecr.ap-south-1.amazonaws.com/kafka-ecomsaga-$SERVICE:latest"
+              
+              # Stop and remove old container
+              docker stop $SERVICE || true
+              docker rm $SERVICE || true
+              
+              # Pull the latest image
+              docker pull $IMAGE
+              
+              # Run the new container, mounting the EBS volume to /h2-data inside the container
+              docker run -d \
+                --name $SERVICE \
+                -p $PORT:$PORT \
+                -v /mnt/h2-data:/h2-data \
+                --restart unless-stopped \
+                $IMAGE
+            done
+            
+            # Clean up old unused Docker images to save disk space
+            docker image prune -af
+          EOF
+          )
+
+          # Send the command to the EC2 instance tagged with Name=kafka-ecomsaga-server
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=${{ env.PROJECT_PREFIX }}-server" \
+            --parameters commands=["$DEPLOY_SCRIPT"] \
+            --comment "Deploying latest EcomSaga containers"
