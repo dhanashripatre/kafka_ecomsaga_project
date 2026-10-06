@@ -31,9 +31,13 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # NOTE: Assuming a standard Maven multi-module project
       - name: 3. Build Java Applications
-        run: mvn clean package -DskipTests
+        run: |
+          SERVICES=("order-service" "inventory-service" "payment-service" "notification-service")
+          for SERVICE in "${SERVICES[@]}"; do
+            echo "Building $SERVICE..."
+            mvn -f ./$SERVICE/pom.xml clean package -DskipTests
+          done
 
       - name: 4. SonarQube Analysis
         # Replace with your actual SonarQube GitHub Action configuration
@@ -65,8 +69,8 @@ jobs:
             LATEST_URI="$ECR_REGISTRY/$REPO_NAME:latest"
             
             echo "Building $SERVICE..."
-            # Assuming Dockerfiles are in service subdirectories (e.g., ./order/Dockerfile)
-            docker build -t $IMAGE_URI -t $LATEST_URI ./$SERVICE
+            # Assuming Dockerfiles are in service subdirectories (e.g., ./order-service/Dockerfile)
+            docker build -t $IMAGE_URI -t $LATEST_URI ./$SERVICE-service
             
             echo "Running Trivy Vulnerability Scanner on $SERVICE..."
             # Download and run Trivy locally on the built image
