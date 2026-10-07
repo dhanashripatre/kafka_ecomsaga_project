@@ -37,8 +37,9 @@ resource "null_resource" "print_urls" {
   provisioner "local-exec" {
     command = "bash print_urls.sh"
     environment = {
-      ALB_URL = aws_lb.main.dns_name
-      EC2_IP  = aws_instance.app_server.public_ip
+      ALB_URL       = aws_lb.main.dns_name
+      EC2_IP        = aws_instance.app_server.public_ip
+      MONITORING_IP = aws_instance.monitoring_server.public_ip
     }
   }
 }

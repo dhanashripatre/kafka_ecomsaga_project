@@ -39,12 +39,34 @@ if [ -n "$EC2_IP" ]; then
     echo ""
 fi
 
+if [ -z "$MONITORING_IP" ]; then
+    MONITORING_IP=$(terraform output -raw monitoring_public_ip 2>/dev/null)
+fi
+if [ -n "$MONITORING_IP" ]; then
+    echo "--- Monitoring Infrastructure ---"
+    echo "Grafana:          http://${MONITORING_IP}:3000"
+    echo "  Username:       admin"
+    echo "  Password:       admin"
+    echo "Prometheus:       http://${MONITORING_IP}:9090"
+    echo ""
+    echo "--- Connecting Data Sources in Grafana ---"
+    echo "1. Prometheus: Go to Data Sources -> Add Prometheus"
+    echo "   URL: http://prometheus:9090"
+    echo "2. Loki: Go to Data Sources -> Add Loki"
+    echo "   URL: http://loki:3100"
+    echo ""
+fi
+
 echo "--- Database Credentials (H2) ---"
 echo "Order DB:         http://${ALB_URL}/api/order/h2-console"
+echo "  JDBC URL:       jdbc:h2:mem:orderdb"
 echo "Inventory DB:     http://${ALB_URL}/api/inventory/h2-console"
+echo "  JDBC URL:       jdbc:h2:mem:inventorydb"
 echo "Payment DB:       http://${ALB_URL}/api/payment/h2-console"
+echo "  JDBC URL:       jdbc:h2:mem:paymentdb"
 echo "Notification DB:  http://${ALB_URL}/api/notification/h2-console"
+echo "  JDBC URL:       jdbc:h2:mem:notificationdb"
 echo ""
-echo "Username: sa"
-echo "Password: your_secret_password"
+echo "Username: root"
+echo "Password: root"
 echo "========================================="

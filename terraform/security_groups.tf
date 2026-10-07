@@ -30,11 +30,11 @@ resource "aws_security_group" "ec2_sg" {
   description = "Allow traffic from ALB to EC2 container ports"
   vpc_id      = data.aws_vpc.default.id
 
-  # Allow traffic ONLY from the ALB security group on ports 8080-8083
+  # Allow traffic ONLY from the ALB security group on ports 8080-8084
   ingress {
     description     = "Traffic from ALB to Containers"
     from_port       = 8080
-    to_port         = 8083
+    to_port         = 8084
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
   }
@@ -52,7 +52,7 @@ resource "aws_security_group" "ec2_sg" {
   ingress {
     description = "Prometheus Scrape"
     from_port   = 8080
-    to_port     = 8083
+    to_port     = 8084
     protocol    = "tcp"
     cidr_blocks = [data.aws_vpc.default.cidr_block]
   }

@@ -73,10 +73,22 @@ resource "aws_instance" "monitoring_server" {
               global:
                 scrape_interval: 15s
               scrape_configs:
-                - job_name: 'spring-boot-apps'
-                  metrics_path: '/actuator/prometheus'
+                - job_name: 'order-service'
+                  metrics_path: '/api/order/actuator/prometheus'
                   static_configs:
-                    - targets: ['${aws_instance.app_server.private_ip}:8080', '${aws_instance.app_server.private_ip}:8081', '${aws_instance.app_server.private_ip}:8082', '${aws_instance.app_server.private_ip}:8083']
+                    - targets: ['${aws_instance.app_server.private_ip}:8080']
+                - job_name: 'inventory-service'
+                  metrics_path: '/api/inventory/actuator/prometheus'
+                  static_configs:
+                    - targets: ['${aws_instance.app_server.private_ip}:8081']
+                - job_name: 'payment-service'
+                  metrics_path: '/api/payment/actuator/prometheus'
+                  static_configs:
+                    - targets: ['${aws_instance.app_server.private_ip}:8082']
+                - job_name: 'notification-service'
+                  metrics_path: '/api/notification/actuator/prometheus'
+                  static_configs:
+                    - targets: ['${aws_instance.app_server.private_ip}:8083']
               PROMETHEUS
 
               # Create Loki config
@@ -93,20 +105,20 @@ resource "aws_instance" "monitoring_server" {
                     replication_factor: 1
                 chunk_idle_period: 5m
                 chunk_retain_period: 30s
+                wal:
+                  dir: /tmp/loki/wal
               schema_config:
                 configs:
                   - from: 2020-10-24
-                    store: boltdb-shipper
+                    store: boltdb
                     object_store: filesystem
                     schema: v11
                     index:
                       prefix: index_
                       period: 24h
               storage_config:
-                boltdb_shipper:
-                  active_index_directory: /tmp/loki/index
-                  cache_location: /tmp/loki/boltdb-cache
-                  shared_store: filesystem
+                boltdb:
+                  directory: /tmp/loki/index
                 filesystem:
                   directory: /tmp/loki/chunks
               limits_config:
@@ -124,7 +136,7 @@ resource "aws_instance" "monitoring_server" {
               
               docker run -d --name loki --network monitoring-network -p 3100:3100 \
                 -v /opt/monitoring/loki-config.yaml:/etc/loki/local-config.yaml \
-                grafana/loki:latest -config.file=/etc/loki/local-config.yaml
+                grafana/loki:2.9.2 -config.file=/etc/loki/local-config.yaml
               
               docker run -d --name grafana --network monitoring-network -p 3000:3000 \
                 -e GF_SECURITY_ADMIN_PASSWORD=admin \

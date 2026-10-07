@@ -21,6 +21,12 @@ resource "aws_iam_role_policy_attachment" "ecr_read" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# Allow EC2 to query other instances (needed for Promtail to find the monitoring server)
+resource "aws_iam_role_policy_attachment" "ec2_read" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"
+}
+
 # Allow Session Manager access (allows you to securely terminal into EC2 from AWS console without opening SSH port 22)
 resource "aws_iam_role_policy_attachment" "ssm_core" {
   role       = aws_iam_role.ec2_role.name
