@@ -142,6 +142,49 @@ jobs:
               -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092 \
               --restart unless-stopped \
               provectuslabs/kafka-ui:latest
+
+            # Deploy Promtail to send logs to Loki
+            MONITORING_IP=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=kafka-ecomsaga-monitoring-server" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PrivateIpAddress" --output text)
+            
+            if [ -n "$MONITORING_IP" ] && [ "$MONITORING_IP" != "None" ]; then
+              echo "server:" > /tmp/promtail-config.yaml
+              echo "  http_listen_port: 9080" >> /tmp/promtail-config.yaml
+              echo "  grpc_listen_port: 0" >> /tmp/promtail-config.yaml
+              echo "" >> /tmp/promtail-config.yaml
+              echo "positions:" >> /tmp/promtail-config.yaml
+              echo "  filename: /tmp/positions.yaml" >> /tmp/promtail-config.yaml
+              echo "" >> /tmp/promtail-config.yaml
+              echo "clients:" >> /tmp/promtail-config.yaml
+              echo "  - url: http://MONITORING_SERVER_IP:3100/loki/api/v1/push" >> /tmp/promtail-config.yaml
+              echo "" >> /tmp/promtail-config.yaml
+              echo "scrape_configs:" >> /tmp/promtail-config.yaml
+              echo "  - job_name: system" >> /tmp/promtail-config.yaml
+              echo "    static_configs:" >> /tmp/promtail-config.yaml
+              echo "    - targets:" >> /tmp/promtail-config.yaml
+              echo "        - localhost" >> /tmp/promtail-config.yaml
+              echo "      labels:" >> /tmp/promtail-config.yaml
+              echo "        job: varlogs" >> /tmp/promtail-config.yaml
+              echo "        __path__: /var/log/*log" >> /tmp/promtail-config.yaml
+              echo "  - job_name: docker" >> /tmp/promtail-config.yaml
+              echo "    docker_sd_configs:" >> /tmp/promtail-config.yaml
+              echo "      - host: unix:///var/run/docker.sock" >> /tmp/promtail-config.yaml
+              echo "        refresh_interval: 5s" >> /tmp/promtail-config.yaml
+              echo "    relabel_configs:" >> /tmp/promtail-config.yaml
+              echo "      - source_labels: ['__meta_docker_container_name']" >> /tmp/promtail-config.yaml
+              echo "        regex: '/(.*)'" >> /tmp/promtail-config.yaml
+              echo "        target_label: 'container'" >> /tmp/promtail-config.yaml
+              # Inject actual IP
+              sed -i "s/MONITORING_SERVER_IP/$MONITORING_IP/g" /tmp/promtail-config.yaml
+
+              docker stop promtail || true
+              docker rm promtail || true
+              docker run -d --name promtail \
+                --network saga-network \
+                -v /tmp/promtail-config.yaml:/etc/promtail/config.yml \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v /var/lib/docker/containers:/var/lib/docker/containers \
+                grafana/promtail:latest -config.file=/etc/promtail/config.yml
+            fi
             
             SERVICES=("order:8080" "inventory:8081" "payment:8082" "notification:8083")
             

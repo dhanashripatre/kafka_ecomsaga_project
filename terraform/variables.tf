@@ -10,6 +10,12 @@ variable "instance_type" {
   default     = "c7i-flex.large"
 }
 
+variable "monitoring_instance_type" {
+  description = "EC2 instance type for the monitoring server"
+  type        = string
+  default     = "t3.micro"
+}
+
 variable "project_name" {
   description = "Name of the project for tagging and resource naming"
   type        = string

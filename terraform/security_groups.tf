@@ -48,6 +48,15 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Allow internal Prometheus scraping from the Monitoring Server
+  ingress {
+    description = "Prometheus Scrape"
+    from_port   = 8080
+    to_port     = 8083
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
